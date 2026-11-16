@@ -38,6 +38,41 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Simpan login (cookie)
+        working-directory: app
+        run: |
+          F=$(find android/app/src/main/java -name MainActivity.java | head -n 1)
+          cat > "$F" <<EOF
+          package $APP_ID;
+
+          import android.webkit.CookieManager;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onResume() {
+                  super.onResume();
+                  CookieManager cm = CookieManager.getInstance();
+                  cm.setAcceptCookie(true);
+                  if (getBridge() != null && getBridge().getWebView() != null) {
+                      cm.setAcceptThirdPartyCookies(getBridge().getWebView(), true);
+                  }
+              }
+
+              @Override
+              public void onPause() {
+                  super.onPause();
+                  CookieManager.getInstance().flush();
+              }
+
+              @Override
+              public void onStop() {
+                  super.onStop();
+                  CookieManager.getInstance().flush();
+              }
+          }
+          EOF
+
       - name: Pasang ikon
         working-directory: app
         run: |
