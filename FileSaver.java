@@ -8,6 +8,7 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
+import android.webkit.MimeTypeMap;
 import android.widget.Toast;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -23,6 +24,9 @@ public class FileSaver {
     @JavascriptInterface
     public void save(String b64, String name, String mime) {
         try {
+            if (name == null || name.length() == 0) {
+                name = "claude-" + System.currentTimeMillis();
+            }
             saveBytes(Base64.decode(b64, Base64.DEFAULT), name, mime);
         } catch (Exception e) {
             toast("Gagal menyimpan file");
@@ -42,19 +46,19 @@ public class FileSaver {
         });
     }
 
-    public static String clean(String name) {
-        if (name == null || name.length() == 0) {
-            name = "file";
-        }
-        name = name.replaceAll("[^A-Za-z0-9._-]", "_");
-        if (name.length() > 120) {
-            name = name.substring(name.length() - 120);
-        }
-        return name;
-    }
-
     public void saveBytes(byte[] data, String rawName, String mime) throws Exception {
-        String name = clean(rawName);
+        String name = NameFix.fixName(rawName, mime);
+        String ext = NameFix.extOf(name);
+        if (ext.length() == 0 || ext.equals("bin")) {
+            String s = NameFix.sniff(data);
+            if (s != null) {
+                name = NameFix.withExt(name, s);
+            }
+        }
+        String guess = MimeTypeMap.getSingleton().getMimeTypeFromExtension(NameFix.extOf(name));
+        if (guess != null && (mime == null || mime.length() == 0 || mime.contains("octet-stream"))) {
+            mime = guess;
+        }
         if (mime == null || mime.length() == 0) {
             mime = "application/octet-stream";
         }

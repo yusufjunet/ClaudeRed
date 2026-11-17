@@ -4,6 +4,8 @@ import android.app.DownloadManager;
 import android.content.Context;
 import android.net.Uri;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Base64;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
@@ -14,6 +16,24 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     private boolean ready = false;
     private FileSaver saver;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+
+    // Menangkap nama asli file dari tombol download di halaman
+    private static final String HOOK =
+        "(function(){if(window.__dlHook)return;window.__dlHook=1;"
+        + "document.addEventListener('click',function(e){var a=e.target&&e.target.closest"
+        + "?e.target.closest('a[download]'):null;if(a){window.__dlName=a.getAttribute('download')||'';}},true);"
+        + "var o=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){"
+        + "if(this.download){window.__dlName=this.download;}return o.apply(this,arguments);};})();";
+
+    private final Runnable injector = new Runnable() {
+        public void run() {
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                getBridge().getWebView().evaluateJavascript(HOOK, null);
+            }
+            handler.postDelayed(this, 3000);
+        }
+    };
 
     private void setupDownloads() {
         if (ready || getBridge() == null || getBridge().getWebView() == null) {
@@ -31,14 +51,15 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void handleDownload(String url, String ua, String cd, String mime) {
-        String name = FileSaver.clean(URLUtil.guessFileName(url, cd, mime));
+        String name = NameFix.fixName(URLUtil.guessFileName(url, cd, mime), mime);
+        String m = mime == null ? "" : mime.replace("'", "");
         try {
             if (url.startsWith("blob:")) {
-                String js = "(function(){var x=new XMLHttpRequest();x.open('GET','"
-                    + url.replace("'", "%27") + "',true);x.responseType='blob';"
-                    + "x.onload=function(){var r=new FileReader();r.onloadend=function(){"
-                    + "var s=r.result;AndroidSaver.save(s.substring(s.indexOf(',')+1),'"
-                    + name + "','" + (mime == null ? "" : mime.replace("'", "")) + "');};"
+                String js = "(function(){var n=window.__dlName||'';window.__dlName='';"
+                    + "var x=new XMLHttpRequest();x.open('GET','" + url.replace("'", "%27")
+                    + "',true);x.responseType='blob';x.onload=function(){var t=x.response.type||'"
+                    + m + "';var r=new FileReader();r.onloadend=function(){var s=r.result;"
+                    + "AndroidSaver.save(s.substring(s.indexOf(',')+1),n,t);};"
                     + "r.readAsDataURL(x.response);};x.onerror=function(){AndroidSaver.fail();};"
                     + "x.send();})();";
                 getBridge().getWebView().evaluateJavascript(js, null);
@@ -77,11 +98,14 @@ public class MainActivity extends BridgeActivity {
             cm.setAcceptThirdPartyCookies(getBridge().getWebView(), true);
         }
         setupDownloads();
+        handler.removeCallbacks(injector);
+        handler.post(injector);
     }
 
     @Override
     public void onPause() {
         super.onPause();
+        handler.removeCallbacks(injector);
         CookieManager.getInstance().flush();
     }
 
