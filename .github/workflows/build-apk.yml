@@ -38,68 +38,26 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: Simpan login (cookie)
+      - name: Pasang kode login dan download
         working-directory: app
         run: |
-          F=$(find android/app/src/main/java -name MainActivity.java | head -n 1)
-          cat > "$F" <<EOF
-          package $APP_ID;
-
-          import android.webkit.CookieManager;
-          import com.getcapacitor.BridgeActivity;
-
-          public class MainActivity extends BridgeActivity {
-              @Override
-              public void onResume() {
-                  super.onResume();
-                  CookieManager cm = CookieManager.getInstance();
-                  cm.setAcceptCookie(true);
-                  if (getBridge() != null && getBridge().getWebView() != null) {
-                      cm.setAcceptThirdPartyCookies(getBridge().getWebView(), true);
-                  }
-              }
-
-              @Override
-              public void onPause() {
-                  super.onPause();
-                  CookieManager.getInstance().flush();
-              }
-
-              @Override
-              public void onStop() {
-                  super.onStop();
-                  CookieManager.getInstance().flush();
-              }
-          }
-          EOF
+          for N in MainActivity FileSaver; do
+            test -f ../$N.java || { echo "::error::$N.java tidak ada di folder utama repo"; exit 1; }
+          done
+          D=$(dirname "$(find android/app/src/main/java -name MainActivity.java | head -n 1)")
+          for N in MainActivity FileSaver; do
+            sed "s/APP_ID_PLACEHOLDER/$APP_ID/" ../$N.java > "$D/$N.java"
+          done
 
       - name: Pasang ikon
         working-directory: app
         run: |
-          if [ ! -f ../icon-only.png ]; then
-            echo "::warning::icon-only.png tidak ada di folder utama repo, ikon bawaan dipakai"
+          if [ ! -f ../icon-only.png ] || [ ! -f ../pasang_ikon.py ]; then
+            echo "::warning::icon-only.png atau pasang_ikon.py tidak ada, ikon bawaan dipakai"
             exit 0
           fi
           python3 -m pip install --quiet pillow || python3 -m pip install --quiet --break-system-packages pillow
-          python3 - <<'PY'
-          import os
-          from PIL import Image, ImageDraw
-          src = Image.open("../icon-only.png").convert("RGB")
-          sizes = {"mdpi": (48, 108), "hdpi": (72, 162), "xhdpi": (96, 216), "xxhdpi": (144, 324), "xxxhdpi": (192, 432)}
-          for d, (leg, fg) in sizes.items():
-              p = f"android/app/src/main/res/mipmap-{d}"
-              os.makedirs(p, exist_ok=True)
-              sq = src.resize((leg, leg), Image.LANCZOS)
-              sq.save(f"{p}/ic_launcher.png")
-              m = Image.new("L", (leg * 4, leg * 4), 0)
-              ImageDraw.Draw(m).ellipse((0, 0, leg * 4 - 1, leg * 4 - 1), fill=255)
-              m = m.resize((leg, leg), Image.LANCZOS)
-              r = Image.new("RGBA", (leg, leg), (0, 0, 0, 0))
-              r.paste(sq, (0, 0), m)
-              r.save(f"{p}/ic_launcher_round.png")
-              src.resize((fg, fg), Image.LANCZOS).save(f"{p}/ic_launcher_foreground.png")
-          print("ikon terpasang")
-          PY
+          python3 ../pasang_ikon.py
 
       - name: Build APK
         working-directory: app/android
