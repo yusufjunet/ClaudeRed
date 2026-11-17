@@ -41,11 +41,11 @@ jobs:
       - name: Pasang kode login dan download
         working-directory: app
         run: |
-          for N in MainActivity FileSaver; do
+          for N in MainActivity FileSaver NameFix; do
             test -f ../$N.java || { echo "::error::$N.java tidak ada di folder utama repo"; exit 1; }
           done
           D=$(dirname "$(find android/app/src/main/java -name MainActivity.java | head -n 1)")
-          for N in MainActivity FileSaver; do
+          for N in MainActivity FileSaver NameFix; do
             sed "s/APP_ID_PLACEHOLDER/$APP_ID/" ../$N.java > "$D/$N.java"
           done
 
